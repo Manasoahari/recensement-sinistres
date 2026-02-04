@@ -1,0 +1,15 @@
+{
+  "name": "firebase-import",
+  "version": "1.0.0",
+  "description": "Import CSV vers Firebase",
+  "main": "import-csv.js",
+  "type": "module",
+  "scripts": {
+    "import": "node import-csv.js"
+  },
+  "dependencies": {
+    "firebase": "^10.14.1",
+    "csv-parser": "^3.0.0",
+    "iconv-lite": "^0.6.3"
+  }
+}
