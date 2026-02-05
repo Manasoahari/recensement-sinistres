@@ -1,9 +1,6 @@
-// Firebase Configuration Template
-// Replace these values with your Firebase project credentials
-// Get these from: Firebase Console > Project Settings > General > Your apps > Web app
-
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
@@ -17,8 +14,9 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
+// Initialize Firestore & Auth
 export const db = getFirestore(app);
+export const auth = getAuth(app);
 
 // Collection name
 export const VICTIMS_COLLECTION = 'victims';

@@ -1,36 +1,30 @@
 import { useState, useMemo } from 'react';
 import { useVictims } from './hooks/useVictims';
 import { db } from './services/firebase';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import SearchBar from './components/SearchBar';
 import VictimList from './components/VictimList';
+import Login from './components/Login';
+import Register from './components/Register';
+
 import './App.css';
 
-function App() {
-  const { victims, loading, error, toggleChecked, importVictims } = useVictims();
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // Filter victims based on search term
-  const filteredVictims = useMemo(() => {
-    if (!searchTerm.trim()) return victims;
-
-    const term = searchTerm.toLowerCase();
-    return victims.filter(victim => {
-      return (
-        victim.nom?.toLowerCase().includes(term) ||
-        victim.prenoms?.toLowerCase().includes(term) ||
-        victim.cin?.toLowerCase().includes(term) ||
-        victim.arrondissement?.toLowerCase().includes(term) ||
-        victim.fokontany?.toLowerCase().includes(term)
-      );
-    });
-  }, [victims, searchTerm]);
+const Dashboard = () => {
+  const { user, logout } = useAuth();
+  const {
+    victims,
+    loading,
+    error,
+    toggleChecked,
+    setFilterStatus,
+    setSearchQuery,
+    loadMore,
+    hasMore,
+    filterStatus
+  } = useVictims(user);
 
   const handleSearch = (term) => {
-    setSearchTerm(term);
-  };
-
-  const handleImport = async (victimsData) => {
-    return await importVictims(victimsData);
+    setSearchQuery(term);
   };
 
   return (
@@ -48,7 +42,25 @@ function App() {
                 <p className="subtitle">Système de gestion et suivi</p>
               </div>
             </div>
+            <div className="header-user">
+              <span className="user-email">{user?.email}</span>
+              <button onClick={logout} className="logout-btn">Déconnexion</button>
+            </div>
+          </div>
 
+          <div className="tabs">
+            <button
+              className={`tab-button ${filterStatus === 'todo' ? 'active' : ''}`}
+              onClick={() => setFilterStatus('todo')}
+            >
+              À Vérifier
+            </button>
+            <button
+              className={`tab-button ${filterStatus === 'verified' ? 'active' : ''}`}
+              onClick={() => setFilterStatus('verified')}
+            >
+              Vérifiés
+            </button>
           </div>
         </header>
 
@@ -65,10 +77,18 @@ function App() {
           <SearchBar onSearch={handleSearch} />
 
           <VictimList
-            victims={filteredVictims}
+            victims={victims}
             loading={loading}
             onToggleChecked={toggleChecked}
           />
+
+          {hasMore && !loading && victims.length > 0 && (
+            <div className="load-more-container">
+              <button onClick={loadMore} className="load-more-button">
+                Charger plus...
+              </button>
+            </div>
+          )}
         </main>
 
         <footer className="app-footer">
@@ -77,6 +97,33 @@ function App() {
       </div>
     </div>
   );
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
+
+const AppContent = () => {
+  const { user, loading } = useAuth();
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  if (loading) {
+    return <div className="loading-screen">Chargement...</div>;
+  }
+
+  if (user) {
+    return <Dashboard />;
+  }
+
+  if (isRegistering) {
+    return <Register onSwitchToLogin={() => setIsRegistering(false)} />;
+  }
+
+  return <Login onSwitchToRegister={() => setIsRegistering(true)} />;
+};
 
 export default App;

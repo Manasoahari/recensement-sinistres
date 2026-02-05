@@ -1,44 +1,90 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, updateDoc, writeBatch, query, orderBy } from 'firebase/firestore';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+    collection,
+    doc,
+    updateDoc,
+    query,
+    orderBy,
+    where,
+    limit,
+    startAfter,
+    getDocs,
+    writeBatch
+} from 'firebase/firestore';
 import { db, VICTIMS_COLLECTION } from '../services/firebase';
 
-/**
- * Custom hook for managing victims data with Firebase
- * Provides real-time synchronization and CRUD operations
- */
-export const useVictims = () => {
+export const useVictims = (user) => {
     const [victims, setVictims] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('todo'); // 'todo' or 'verified'
+    const [searchQuery, setSearchQuery] = useState('');
+    const [lastDoc, setLastDoc] = useState(null);
+    const [hasMore, setHasMore] = useState(true);
 
-    useEffect(() => {
-        // Set up real-time listener
-        const q = query(collection(db, VICTIMS_COLLECTION), orderBy('nom'));
+    const PAGE_SIZE = 20;
 
-        const unsubscribe = onSnapshot(
-            q,
-            (snapshot) => {
-                const victimsData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                setVictims(victimsData);
-                setLoading(false);
-            },
-            (err) => {
-                console.error('Error fetching victims:', err);
-                setError(err.message);
-                setLoading(false);
+    const fetchVictims = useCallback(async (isLoadMore = false) => {
+        try {
+            setLoading(true);
+
+            let q = query(
+                collection(db, VICTIMS_COLLECTION),
+                where('checked', '==', filterStatus === 'verified'),
+                orderBy('nom'),
+                limit(PAGE_SIZE)
+            );
+
+            if (isLoadMore && lastDoc) {
+                q = query(q, startAfter(lastDoc));
             }
+
+            const snapshot = await getDocs(q);
+
+            const newVictims = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            if (isLoadMore) {
+                setVictims(prev => [...prev, ...newVictims]);
+            } else {
+                setVictims(newVictims);
+            }
+
+            setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+            setHasMore(snapshot.docs.length === PAGE_SIZE);
+            setLoading(false);
+        } catch (err) {
+            console.error('Error fetching victims:', err);
+            setError(err.message);
+            setLoading(false);
+        }
+    }, [filterStatus, lastDoc]);
+
+    // Initial load and filter change
+    useEffect(() => {
+        setLastDoc(null);
+        setVictims([]);
+        fetchVictims(false);
+    }, [filterStatus]);
+
+    const filteredVictims = useMemo(() => {
+        if (!searchQuery.trim()) return victims;
+        const term = searchQuery.toLowerCase();
+        return victims.filter(v =>
+            v.nom?.toLowerCase().includes(term) ||
+            v.prenoms?.toLowerCase().includes(term) ||
+            v.cin?.toLowerCase().includes(term)
         );
+    }, [victims, searchQuery]);
 
-        // Cleanup listener on unmount
-        return () => unsubscribe();
-    }, []);
+    const loadMore = () => {
+        if (!loading && hasMore) {
+            fetchVictims(true);
+        }
+    };
 
-    /**
-     * Toggle checked status for a victim
-     */
     const toggleChecked = async (victimId, currentStatus) => {
         try {
             const victimRef = doc(db, VICTIMS_COLLECTION, victimId);
@@ -46,60 +92,46 @@ export const useVictims = () => {
                 checked: !currentStatus,
                 lastModified: new Date().toISOString()
             });
+
+            // Optimistic update
+            setVictims(prev => prev.filter(v => v.id !== victimId));
         } catch (err) {
             console.error('Error updating victim:', err);
             throw err;
         }
     };
 
-    /**
-     * Batch import victims from Excel
-     */
     const importVictims = async (victimsData) => {
         try {
             setLoading(true);
             const batch = writeBatch(db);
-
             victimsData.forEach((victim) => {
-                // Sanitize CIN to create a valid Firebase document ID
-                // Remove slashes, spaces, and special characters
-                const sanitizeCIN = (cin) => {
-                    if (!cin) return null;
-                    return cin
-                        .toString()
-                        .replace(/\//g, '_')  // Replace slashes with underscores
-                        .replace(/\s+/g, '_')  // Replace spaces with underscores
-                        .replace(/[^a-zA-Z0-9_-]/g, '')  // Remove other special chars
-                        .substring(0, 100);  // Limit length
-                };
-
-                // Use sanitized CIN as document ID if available, otherwise generate one
-                const sanitizedCIN = sanitizeCIN(victim.cin);
-                const docId = sanitizedCIN || `victim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const docId = victim.cin || `victim_${Date.now()}_${Math.random()}`;
                 const victimRef = doc(db, VICTIMS_COLLECTION, docId);
-
-                // Remove the id field from victim data as we use it as document ID
-                const { id, ...victimData } = victim;
-
-                batch.set(victimRef, victimData, { merge: true });
+                const { id, ...data } = victim;
+                batch.set(victimRef, data, { merge: true });
             });
-
             await batch.commit();
             setLoading(false);
-            return { success: true, count: victimsData.length };
+            return { success: true };
         } catch (err) {
-            console.error('Error importing victims:', err);
-            setError(err.message);
+            console.error('Error importing:', err);
             setLoading(false);
             throw err;
         }
     };
 
     return {
-        victims,
+        victims: filteredVictims,
         loading,
         error,
         toggleChecked,
+        filterStatus,
+        setFilterStatus,
+        searchQuery,
+        setSearchQuery,
+        loadMore,
+        hasMore,
         importVictims
     };
 };
