@@ -19,7 +19,7 @@ const VictimList = ({ victims, loading, onToggleChecked }) => {
                     <path d="M32 20v16m0 8h.02" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                 </svg>
                 <h3>Aucun sinistré trouvé</h3>
-                <p>Importez un fichier Excel pour commencer</p>
+
             </div>
         );
     }
