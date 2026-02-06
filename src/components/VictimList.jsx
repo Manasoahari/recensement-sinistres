@@ -28,9 +28,9 @@ const VictimList = ({ victims, loading, onToggleChecked }) => {
         <div className="victim-list">
             <div className="list-header">
                 <h2>{victims.length} sinistré{victims.length > 1 ? 's' : ''}</h2>
-                <span className="checked-count">
+                {/* <span className="checked-count">
                     {victims.filter(v => v.checked).length} vérifié{victims.filter(v => v.checked).length > 1 ? 's' : ''}
-                </span>
+                </span> */}
             </div>
 
             <div className="victims-grid">

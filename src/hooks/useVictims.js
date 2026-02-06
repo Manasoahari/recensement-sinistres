@@ -101,26 +101,6 @@ export const useVictims = (user) => {
         }
     };
 
-    const importVictims = async (victimsData) => {
-        try {
-            setLoading(true);
-            const batch = writeBatch(db);
-            victimsData.forEach((victim) => {
-                const docId = victim.cin || `victim_${Date.now()}_${Math.random()}`;
-                const victimRef = doc(db, VICTIMS_COLLECTION, docId);
-                const { id, ...data } = victim;
-                batch.set(victimRef, data, { merge: true });
-            });
-            await batch.commit();
-            setLoading(false);
-            return { success: true };
-        } catch (err) {
-            console.error('Error importing:', err);
-            setLoading(false);
-            throw err;
-        }
-    };
-
     return {
         victims: filteredVictims,
         loading,
@@ -131,7 +111,6 @@ export const useVictims = (user) => {
         searchQuery,
         setSearchQuery,
         loadMore,
-        hasMore,
-        importVictims
+        hasMore
     };
 };
