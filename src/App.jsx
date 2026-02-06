@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useVictims } from './hooks/useVictims';
+import { useTotalVictims } from './hooks/useTotalVictims';
 import { db } from './services/firebase';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import SearchBar from './components/SearchBar';
@@ -20,10 +20,8 @@ const Dashboard = () => {
     toggleChecked,
     setFilterStatus,
     setSearchQuery,
-    loadMore,
-    hasMore,
     filterStatus
-  } = useVictims(user);
+  } = useTotalVictims();
 
   const [verifyingVictim, setVerifyingVictim] = useState(null);
 
@@ -58,9 +56,6 @@ const Dashboard = () => {
     setVerifyingVictim(null);
 
     try {
-      // Show browser alert as requested
-      alert(`${victimName} est enregistré`);
-
       // Now perform the actual verification
       await toggleChecked(victimId, false);
     } catch (err) {
@@ -138,17 +133,10 @@ const Dashboard = () => {
             />
           )}
 
-          {hasMore && !loading && victims.length > 0 && (
-            <div className="load-more-container">
-              <button onClick={loadMore} className="load-more-button">
-                Charger plus...
-              </button>
-            </div>
-          )}
         </main>
 
         <footer className="app-footer">
-          <p>© 2026 Système de Recensement • Mise à jour en temps réel</p>
+          <p>© 2026 Système de Recensement </p>
         </footer>
       </div>
     </div>

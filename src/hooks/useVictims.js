@@ -12,6 +12,7 @@ import {
     writeBatch
 } from 'firebase/firestore';
 import { db, VICTIMS_COLLECTION } from '../services/firebase';
+import { meiliClient, VICTIMS_INDEX } from '../services/meilisearch';
 
 export const useVictims = (user) => {
     const [victims, setVictims] = useState([]);
@@ -22,9 +23,25 @@ export const useVictims = (user) => {
     const [lastDoc, setLastDoc] = useState(null);
     const [hasMore, setHasMore] = useState(true);
 
+    // Meilisearch states
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [debouncedQuery, setDebouncedQuery] = useState('');
+
     const PAGE_SIZE = 20;
 
+    // Debounce search query
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedQuery(searchQuery);
+        }, 500);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
+
     const fetchVictims = useCallback(async (isLoadMore = false) => {
+        // If we are searching, we don't fetch from Firestore here
+        if (searchQuery.trim()) return;
+
         try {
             setLoading(true);
 
@@ -60,27 +77,74 @@ export const useVictims = (user) => {
             setError(err.message);
             setLoading(false);
         }
-    }, [filterStatus, lastDoc]);
+    }, [filterStatus, lastDoc, searchQuery]);
 
-    // Initial load and filter change
+    // Handle Meilisearch global search
     useEffect(() => {
-        setLastDoc(null);
-        setVictims([]);
-        fetchVictims(false);
-    }, [filterStatus]);
+        const performSearch = async () => {
+            const apiKey = import.meta.env.VITE_MEILISEARCH_API_KEY;
+            const isConfigured = apiKey && apiKey !== 'YOUR_MEILISEARCH_SEARCH_KEY';
 
-    const filteredVictims = useMemo(() => {
-        if (!searchQuery.trim()) return victims;
+            if (!debouncedQuery.trim() || !isConfigured) {
+                setSearchResults([]);
+                setIsSearching(false);
+                return;
+            }
+
+            setIsSearching(true);
+            try {
+                const index = meiliClient.index(VICTIMS_INDEX);
+                const response = await index.search(debouncedQuery, {
+                    filter: `checked = ${filterStatus === 'verified'}`,
+                    limit: PAGE_SIZE
+                });
+
+                setSearchResults(response.hits);
+                setHasMore(false);
+            } catch (err) {
+                console.error('Meilisearch error:', err);
+                setSearchResults([]);
+            } finally {
+                setIsSearching(false);
+            }
+        };
+
+        performSearch();
+    }, [debouncedQuery, filterStatus]);
+
+    // Initial load and filter change (only when NOT searching)
+    useEffect(() => {
+        if (!searchQuery.trim()) {
+            setLastDoc(null);
+            setVictims([]);
+            fetchVictims(false);
+        }
+    }, [filterStatus, searchQuery]);
+
+    // Local search fallback
+    const localSearchResults = useMemo(() => {
+        if (!searchQuery.trim()) return [];
         const term = searchQuery.toLowerCase();
         return victims.filter(v =>
             v.nom?.toLowerCase().includes(term) ||
             v.prenoms?.toLowerCase().includes(term) ||
-            v.cin?.toLowerCase().includes(term)
+            v.cin?.toLowerCase().includes(term) ||
+            v.arrondissement?.toLowerCase().includes(term) ||
+            v.fokontany?.toLowerCase().includes(term)
         );
     }, [victims, searchQuery]);
 
+    const displayVictims = useMemo(() => {
+        if (searchQuery.trim()) {
+            // Use Meilisearch results if available, otherwise fallback to local search
+            if (searchResults.length > 0) return searchResults;
+            return localSearchResults;
+        }
+        return victims;
+    }, [victims, searchResults, localSearchResults, searchQuery]);
+
     const loadMore = () => {
-        if (!loading && hasMore) {
+        if (!loading && hasMore && !searchQuery.trim()) {
             fetchVictims(true);
         }
     };
@@ -93,8 +157,9 @@ export const useVictims = (user) => {
                 lastModified: new Date().toISOString()
             });
 
-            // Optimistic update
+            // Optimistic update for both lists
             setVictims(prev => prev.filter(v => v.id !== victimId));
+            setSearchResults(prev => prev.filter(v => v.id !== victimId));
         } catch (err) {
             console.error('Error updating victim:', err);
             throw err;
@@ -102,8 +167,8 @@ export const useVictims = (user) => {
     };
 
     return {
-        victims: filteredVictims,
-        loading,
+        victims: displayVictims,
+        loading: loading || isSearching,
         error,
         toggleChecked,
         filterStatus,
