@@ -7,6 +7,7 @@ import VictimList from './components/VictimList';
 import Login from './components/Login';
 import Register from './components/Register';
 import AdminPanel from './components/AdminPanel';
+import VerificationDialog from './components/VerificationDialog';
 
 import './App.css';
 
@@ -24,8 +25,47 @@ const Dashboard = () => {
     filterStatus
   } = useVictims(user);
 
+  const [verifyingVictim, setVerifyingVictim] = useState(null);
+
   const handleSearch = (term) => {
     setSearchQuery(term);
+  };
+
+  const handleToggleChecked = async (victimId, currentStatus) => {
+    // If we are checking (verifying) someone from 'todo' list
+    if (filterStatus === 'todo' && !currentStatus) {
+      const victim = victims.find(v => v.id === victimId);
+      if (victim) {
+        setVerifyingVictim(victim);
+        return; // Don't verify yet, wait for dialog
+      }
+    }
+
+    // Otherwise (unchecking or from verified list), just toggle normally
+    try {
+      await toggleChecked(victimId, currentStatus);
+    } catch (err) {
+      // Error handling is already in useVictims, but we could add more here if needed
+    }
+  };
+
+  const handleConfirmVerification = async () => {
+    if (!verifyingVictim) return;
+
+    const victimName = `${verifyingVictim.nom} ${verifyingVictim.prenoms || ''}`.trim();
+    const victimId = verifyingVictim.id;
+    // Reset state first to close dialog
+    setVerifyingVictim(null);
+
+    try {
+      // Show browser alert as requested
+      alert(`${victimName} est enregistré`);
+
+      // Now perform the actual verification
+      await toggleChecked(victimId, false);
+    } catch (err) {
+      console.error("Failed to verify victim after dialog:", err);
+    }
   };
 
   return (
@@ -88,8 +128,15 @@ const Dashboard = () => {
           <VictimList
             victims={victims}
             loading={loading}
-            onToggleChecked={toggleChecked}
+            onToggleChecked={handleToggleChecked}
           />
+
+          {verifyingVictim && (
+            <VerificationDialog
+              victim={verifyingVictim}
+              onConfirm={handleConfirmVerification}
+            />
+          )}
 
           {hasMore && !loading && victims.length > 0 && (
             <div className="load-more-container">
